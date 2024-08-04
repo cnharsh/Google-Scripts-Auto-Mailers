@@ -1,0 +1,76 @@
+function appendOutDataFromSubsheets() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet1 = spreadsheet.getSheetByName("OUT Links");
+  var sheet2 = spreadsheet.getSheetByName("Out");
+  // Define header names
+  var headerRange = sheet1.getRange("D2:P2");
+  var headerValues = headerRange.getValues()[0];
+  var headerNames = [];
+  // Include "Key" header
+  headerNames.push("Key");
+  // Add non-empty headers to headerNames array
+  for (var j = 0; j < headerValues.length; j++) {
+    if (headerValues[j] !== "") {
+      headerNames.push(headerValues[j]);
+    }
+  }
+  // Clear existing data except header row in Sheet2
+  if (sheet2.getLastRow() > 1) {
+    sheet2.getRange("A2:" + sheet2.getLastColumn() + sheet2.getLastRow()).clearContent();
+  }
+  var columnAData = sheet1.getRange("A2:A" + sheet1.getLastRow()).getValues();
+  for (var i = 0; i < columnAData.length; i++) {
+    var sheetLink = columnAData[i][0];
+    var subsheetName = sheet1.getRange("C" + (i + 2)).getValue();
+    var hasNonBlankRow = false; // Track if any non-blank rows are found for this link
+    if (sheetLink && subsheetName) {
+      var ss = SpreadsheetApp.openByUrl(sheetLink);
+      var subsheet = ss.getSheetByName(subsheetName);
+      if (subsheet) {
+        var data = subsheet.getDataRange().getValues();
+        var headerRow = data[0];
+        // Determine column indices for header names
+        var headerIndices = headerNames.map(function(header) {
+          return headerRow.indexOf(header);
+        });
+        // Check if any non-blank rows are present
+        var anyNonBlankRow = false;
+        for (var rowIndex = 1; rowIndex < data.length; rowIndex++) {
+          var row = data[rowIndex];
+          var rowData = [];
+          var includeRow = false;
+          // Check if Key header is not blank
+          if (!isFormulaBlank(row[0])) {
+            // Check if any of the requested headers have non-blank values
+            for (var k = 1; k < headerIndices.length; k++) { // Start from 1 to skip Key header
+              var columnIndex = headerIndices[k];
+              var cellValue = row[columnIndex];
+              if (!isFormulaBlank(cellValue)) {
+                rowData.push(cellValue);
+                includeRow = true;
+                anyNonBlankRow = true;
+              } else {
+                rowData.push(""); // Push an empty string for blank formula results
+              }
+            }
+          }
+          // Include row only if it has non-blank data for at least one requested header (excluding Key header)
+          if (includeRow) {
+            sheet2.appendRow([sheetLink, subsheetName].concat(rowData));
+            hasNonBlankRow = true; // Set to true if at least one non-blank row is found
+          }
+        }
+        // Skip appending if only Key header's row is non-blank and other headers' rows are blank
+        if (!anyNonBlankRow) {
+          Logger.log("All requested headers' rows are blank for link: " + sheetLink);
+        }
+      } else {
+        Logger.log("Subsheet not found: " + subsheetName);
+      }
+    }
+  }
+}
+// Function to check if a formula result is blank
+function isFormulaBlank(value) {
+  return value === null || (typeof value === 'string' && value.trim() === '');
+}
