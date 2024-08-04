@@ -1,0 +1,191 @@
+function copyAndEmail() {
+  // Get the active spreadsheet
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Get the sheets by name
+  var customerWiseSheet = spreadsheet.getSheetByName("Customer Wise TAT Status");
+  var tatStatusSheet = spreadsheet.getSheetByName("TAT Status");
+
+  // Get the data in column B starting from B4 in "Customer Wise TAT Status" sheet
+  var data = customerWiseSheet.getRange("B4:B").getValues();
+
+  // Iterate through the data and copy each value to cell A7 in "TAT Status" sheet
+  for (var i = 0; i < data.length; i++) {
+    var name = data[i][0];
+
+    // Check if the name is not empty
+    if (name !== "") {
+      // Paste the name in cell A7 in "TAT Status" sheet
+      tatStatusSheet.getRange("A7").setValue(name);
+
+      // Update timestamp in column C in "Sheet3" only if it's blank or not equal to the current date
+      var timestampCell = customerWiseSheet.getRange(i + 4, 3); // Assuming timestamp should be in column C starting from C4
+      var currentTimestamp = timestampCell.getValue();
+      if (currentTimestamp === "" || !isSameDate(new Date(), currentTimestamp)) {
+        timestampCell.setValue(new Date());
+
+        // Pause for 10 seconds to allow data to refresh
+        Utilities.sleep(10000);
+
+        // Get the email addresses from B7 and C7 in "TAT Status" sheet
+        var emailAddress = tatStatusSheet.getRange("B7").getValue();
+        var kamEmail = tatStatusSheet.getRange("C7").getValue();
+        var alternateEmail = tatStatusSheet.getRange("D7").getValue();
+        // Now, send the email to both the recipient and KAM email addresses
+        sendEmail(tatStatusSheet, emailAddress, kamEmail, alternateEmail);
+
+        // Update timestamp in column C in "Sheet3" after sending the email
+        timestampCell.setValue(new Date());
+      }
+    }
+  }
+}
+
+// Function to check if two dates are the same (ignores time)
+function isSameDate(date1, date2) {
+  return (
+    date1.getDate() === date2.getDate() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getFullYear() === date2.getFullYear()
+  );
+}
+
+// Modified sendEmail function
+function sendEmail(sheet, recipient, kamEmail, alternateEmail) {
+  // Get the values from cells A7, B7, and C7 in "TAT Status" sheet
+  var companyName = sheet.getRange("A7").getValue();
+  var emailAddress = sheet.getRange("B7").getValue();
+  var kamEmail = sheet.getRange("C7").getValue(); // Add this line to get KAM email
+  var alternateEmail = sheet.getRange("D7").getValue();
+  // Set the email subject and body
+  var subject = "Shipment status | Xindus <> " + companyName;
+
+  // Get HTML tables for the specified ranges without color formatting
+  var table1 = captureScreenshot(sheet, "E2:F3", true);
+  var table2 = captureScreenshotWithNonBlankRows(sheet, "E", "H", 6);
+
+  // Save data for Table 3 (non-blank rows) to a CSV file
+  var table3Data = getNonBlankTableData(sheet, "J", "N", 6);
+  var detailedCsv = convertArrayToCsv(table3Data);
+  var csvFileName = "DetailedData.csv";
+
+  // Embed HTML tables in the email body
+  var body = `
+<html>
+  <body style="font-size: 14px;">
+    <p>
+      Dear ${companyName},
+      <br><br>
+      We appreciate your continued partnership with Xindus, and we are committed to providing you with the best service and support. As a part of our ongoing efforts, we would like to keep you informed about the shipment status for the last 30 days.
+    </p>
+
+    ${table1}
+
+    <p>
+      <b>Status of shipments booked, in-transit and delivered as per TAT:</b>
+    </p>
+
+    ${table2}
+
+    <p>
+      <b>Detailed status of shipments that are not delivered yet are in the attached file.</b>
+    </p>
+
+    <p>
+      If you have any questions or require further clarification regarding the report or any other aspect of your account, please feel free to reach out to us at support@xindus.net.
+      <br><br>
+      Thank you for choosing Xindus as your trusted partner.
+      <br><br>
+      Regards,
+      <br>
+      Xindus Trade Networks Pvt Ltd
+      <br>
+      support@xindus.net
+    </p>
+  </body>
+</html>
+`;
+
+  // Send the email to both the recipient and KAM email addresses with CSV attachment for Table 3
+  GmailApp.sendEmail(
+    [emailAddress, kamEmail, alternateEmail].join(','),
+    subject,
+    " ", // body
+    {
+      htmlBody: body,
+      attachments: [{ fileName: csvFileName, content: detailedCsv }]
+    }
+  );
+}
+
+// Function to get data for Table 3 (non-blank rows)
+function getNonBlankTableData(sheet, startColumn, endColumn, startRow) {
+  var data = sheet.getRange(startRow, getColumnIndex(startColumn), sheet.getLastRow() - startRow + 1, getColumnIndex(endColumn) - getColumnIndex(startColumn) + 1).getValues();
+  var nonBlankData = data.filter(row => row.some(cell => cell !== ""));
+  return nonBlankData;
+}
+
+// Function to convert a 2D array to CSV format
+function convertArrayToCsv(data) {
+  var csv = "";
+  data.forEach((row) => {
+    csv += row.join(",") + "\n";
+  });
+  return csv;
+}
+
+// Function to capture screenshot without color formatting
+function captureScreenshot(sheet, range, isBold) {
+  var values = sheet.getRange(range).getValues();
+
+  var htmlTable = `
+<table border="1" style="border-collapse: collapse; width: 100%; margin-bottom: 10px;">
+`;
+
+  values.forEach((row, rowIndex) => {
+    htmlTable += '<tr>';
+    row.forEach((cell) => {
+      var style = `width: 1%; white-space: nowrap; text-align: center;`;
+      if (isBold) {
+        style += 'font-weight: bold;';
+      }
+      htmlTable += `<td style="${style}">${cell}</td>`;
+    });
+    htmlTable += '</tr>';
+  });
+
+  htmlTable += '</table>';
+  return htmlTable;
+}
+
+// Function to capture screenshot with non-blank rows without color formatting
+function captureScreenshotWithNonBlankRows(sheet, startColumn, endColumn, startRow) {
+  var data = sheet.getRange(startRow, getColumnIndex(startColumn), sheet.getLastRow() - startRow + 1, getColumnIndex(endColumn) - getColumnIndex(startColumn) + 1).getValues();
+  var nonBlankData = data.filter(row => row.some(cell => cell !== ""));
+
+  var htmlTable = `
+<table border="1" style="border-collapse: collapse; width: 100%; margin-bottom: 10px;">
+`;
+
+  nonBlankData.forEach((row) => {
+    htmlTable += '<tr>';
+    row.forEach((cell, index) => {
+      var style = `width: 1%; white-space: nowrap; text-align: center;`;
+      // Format date in DD-MM-YYYY format for the third table
+      if (index === 0 && !isNaN(Date.parse(cell))) {
+        var date = new Date(cell);
+        cell = Utilities.formatDate(date, "GMT", "dd-MM-yyyy");
+      }
+      htmlTable += `<td style="${style}">${cell}</td>`;
+    });
+    htmlTable += '</tr>';
+  });
+
+  htmlTable += '</table>';
+  return htmlTable;
+}
+
+// Function to get column index from column letter
+function getColumnIndex(columnLetter) {
+  return columnLetter.charCodeAt(0) - 'A'.charCodeAt(0) + 1;
+}
