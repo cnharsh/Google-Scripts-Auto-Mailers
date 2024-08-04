@@ -1,0 +1,23 @@
+function revenueImportNew() {
+  var sourceSpreadsheet = SpreadsheetApp.openById("1RB0tnBWnydMJFIAesCJSoaY02uRCsRMoSQG7yxwcvlY"); // Replace with your source spreadsheet ID
+  var sourceSheetName = "Reveue Data"; // Replace with the source sheet name
+  var targetSpreadsheet = SpreadsheetApp.getActiveSpreadsheet(); // Assuming you want to import data into the currently active sheet
+  var targetSheetName = "Revenue Raw"; // Replace with the target sheet name in your current spreadsheet
+  var sourceDataColumns = "A:AE"; // Columns A to H
+
+  var sourceSheet = sourceSpreadsheet.getSheetByName(sourceSheetName);
+  var targetSheet = targetSpreadsheet.getSheetByName(targetSheetName);
+
+  if (sourceSheet && targetSheet) {
+    // Clear existing data in the target sheet
+    targetSheet.getRange('A:AE').clear();
+    
+    var sourceRange = sourceSheet.getRange(sourceDataColumns);
+    var data = sourceRange.getValues();
+    
+    var targetRange = targetSheet.getRange(1, 1, data.length, data[0].length);
+    targetRange.setValues(data);
+  } else {
+    Logger.log("Source or target sheet not found.");
+  }
+}
