@@ -1,0 +1,166 @@
+function dailymailsurat() {
+  try {
+    var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    if (!spreadsheet) {
+      throw new Error("Unable to open the spreadsheet.");
+    }
+    
+    var sheetName = "Surat";
+    var sheet = spreadsheet.getSheetByName(sheetName);
+    if (!sheet) {
+      throw new Error("Sheet '" + sheetName + "' not found.");
+    }
+
+    // Table 1A: Fetch data and formatting
+    var table1ARange = "B3:G7";
+    var table1A = getTableData(sheet, table1ARange);
+
+    // Table 1B: Fetch data and formatting
+    var table1BRange = "B9:E15";
+    var table1B = getTableData(sheet, table1BRange);
+
+    // Table 2: Fetch data and formatting, filter rows where column 1 is not blank
+    var lastRow = sheet.getLastRow();
+    var table2Range = "B17:G" + lastRow;
+    var table2 = getTableData(sheet, table2Range, true);
+
+    var currentDate = new Date();
+    var formattedDate = formatDate(currentDate);
+
+    var recipientEmail = "kuldeep@xindus.net,mohit@xindus.net,anand@xindus.net";
+    var subject = `Shipment Summary(Surat): ${formattedDate} [Total Shipments: ${table1A.values[3][1]} | Rev: ${table1A.values[3][4]}  | Cus: ${table1A.values[3][2]}]`;
+    var body = "Please find below the overall snapshot:<br><br>";
+
+    // Add table 1A to email body
+    body += buildHtmlTable(table1A);
+
+    // Add table 1B to email body
+    body += "<br><br>";
+    body += buildHtmlTable(table1B);
+
+    // Add table 2 to email body if it has data
+    if (table2.values.length > 0) {
+      body += "<br><br>Customer wise shipments details:<br><br>";
+      body += buildHtmlTable(table2);
+    } else {
+      body += "<br><br>No customer wise shipments details available.";
+    }
+
+    // Trim the email body if it exceeds the size limit
+    if (body.length > 100000) {
+      body = body.substring(0, 100000) + "... (content trimmed due to size limit)";
+    }
+
+    // Send email
+    MailApp.sendEmail({
+      to: recipientEmail,
+      subject: subject,
+      htmlBody: body
+    });
+
+  } catch (error) {
+    Logger.log("Error occurred: " + error);
+    throw new Error("Error occurred: " + error);
+  }
+}
+
+// Function to fetch table data and formatting
+function getTableData(sheet, range, filterNonBlank = false) {
+  var rangeObj = sheet.getRange(range);
+  var values = rangeObj.getDisplayValues();
+  var backgrounds = rangeObj.getBackgrounds();
+  var fontColors = rangeObj.getFontColors();
+  var fontStyles = rangeObj.getFontStyles();
+  var fontWeights = rangeObj.getFontWeights();
+  var fontSizes = rangeObj.getFontSizes();
+  var alignments = rangeObj.getHorizontalAlignments();
+
+  if (filterNonBlank) {
+    values = values.filter(row => row[0] !== "");
+  }
+
+  return { values, backgrounds, fontColors, fontStyles, fontWeights, fontSizes, alignments };
+}
+
+// Function to build HTML table
+function buildHtmlTable(tableData) {
+  var html = "<table style='border-collapse: collapse; border: 1px solid black;'>";
+  for (var i = 0; i < tableData.values.length; i++) {
+    html += "<tr>";
+    for (var j = 0; j < tableData.values[i].length; j++) {
+      var cellValue = tableData.values[i][j];
+      var cellBackground = tableData.backgrounds && tableData.backgrounds[i] ? tableData.backgrounds[i][j] : "";
+      var cellFontColor = tableData.fontColors && tableData.fontColors[i] ? tableData.fontColors[i][j] : "";
+      var cellFontStyle = tableData.fontStyles && tableData.fontStyles[i] ? tableData.fontStyles[i][j] : "";
+      var cellFontWeight = tableData.fontWeights && tableData.fontWeights[i] ? tableData.fontWeights[i][j] : "";
+      var cellFontSize = tableData.fontSizes && tableData.fontSizes[i] ? tableData.fontSizes[i][j] : "";
+      var cellAlignment = tableData.alignments && tableData.alignments[i] ? tableData.alignments[i][j] : "";
+
+      // Apply specific formatting styles
+      var styleAttribute = `style='padding: 5px; white-space: nowrap; background-color: ${cellBackground}; color: ${cellFontColor}; font-style: ${cellFontStyle}; font-weight: ${cellFontWeight}; font-size: ${cellFontSize}px; text-align: ${cellAlignment};'`;
+
+      html += `<td ${styleAttribute}>`;
+      // Headers should be in bold
+      if (i === 0) {
+        html += `<b>${cellValue}</b>`;
+      } else {
+        // Format numeric values to zero decimals
+        if (typeof cellValue === "number") {
+          cellValue = cellValue.toFixed(0);
+        }
+        // Format dates to DD-MM-YYYY HH:MM:SS format
+        else if (Object.prototype.toString.call(cellValue) === '[object Date]') {
+          cellValue = formatDateToDDMMYYYYHHMMSS(cellValue);
+        }
+        html += cellValue;
+      }
+      html += "</td>";
+    }
+    html += "</tr>";
+  }
+  html += "</table>";
+  return html;
+}
+
+// Helper function to format date to DD-MM-YYYY HH:MM:SS format
+function formatDateToDDMMYYYYHHMMSS(date) {
+  var day = ("0" + date.getDate()).slice(-2);
+  var month = ("0" + (date.getMonth() + 1)).slice(-2);
+  var year = date.getFullYear();
+  var hours = ("0" + date.getHours()).slice(-2);
+  var minutes = ("0" + date.getMinutes()).slice(-2);
+  var seconds = ("0" + date.getSeconds()).slice(-2);
+  return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+}
+
+// Helper function to format the date
+function formatDate(date) {
+  var monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  var day = date.getDate();
+  var suffix = getDaySuffix(day);
+  var month = monthNames[date.getMonth()];
+
+  return `${month} ${day}${suffix}`;
+}
+
+// Helper function to get day suffix
+function getDaySuffix(day) {
+  if (day >= 11 && day <= 13) {
+    return "th";
+  }
+  var lastDigit = day % 10;
+  switch (lastDigit) {
+    case 1:
+      return "st";
+    case 2:
+      return "nd";
+    case 3:
+      return "rd";
+    default:
+      return "th";
+  }
+}
